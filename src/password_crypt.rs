@@ -11,8 +11,8 @@ pub fn encrypt_password(password: &str) -> String {
     let encrypted_data = encrypt(cipher, KEY, Some(IV), data).unwrap();
 
     for hex_pair in encrypted_data {
-        hex = format!("{}{:02X}", hex, hex_pair);
+        hex = format!("{hex}{hex_pair:02X}");
     }
 
-    return hex;
+    hex
 }

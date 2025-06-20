@@ -106,5 +106,5 @@ pub fn simple_example(
         }
     });
 
-    return (sender_tui, receiver_tui);
+    (sender_tui, receiver_tui)
 }

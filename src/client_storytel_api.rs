@@ -54,7 +54,7 @@ pub struct Book {
 }
 
 pub fn login(client_data: &mut ClientData, email: &str, pass: &str) {
-    let hex_encryp_pass = password_crypt::encrypt_password(&pass.trim());
+    let hex_encryp_pass = password_crypt::encrypt_password(pass.trim());
 
     let url = format!(
         "https://www.storytel.com/api/login.action\
@@ -116,10 +116,11 @@ pub fn set_bookmark(client_data: &mut ClientData, position: i64) {
         ("pos", (position * microsec_to_sec).to_string()),
         ("type", "1".to_string()),
     ];
-    let url_set_bookmark = format!("https://www.storytel.se/api/setABookmark.action");
+    let url_set_bookmark =
+        "https://www.storytel.se/api/setABookmark.action".to_string();
     client_data
         .request_client
-        .post(&url_set_bookmark)
+        .post(url_set_bookmark)
         .form(&params)
         .send()
         .unwrap();

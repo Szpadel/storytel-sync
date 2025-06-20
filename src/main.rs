@@ -2,6 +2,7 @@ mod client_storytel_api;
 mod mpv;
 mod password_crypt;
 mod tui;
+mod credentials;
 
 fn main() {
     let user_agent: &str = "okhttp/3.12.8";
@@ -17,7 +18,7 @@ fn main() {
     };
     let client_data = client_storytel_api::ClientData {
         request_client: client,
-        login_data: login_data,
+        login_data,
         sender: None,
         receiver: None,
         current_abookmark_id: None,
@@ -27,7 +28,11 @@ fn main() {
 
     siv.set_user_data(client_data);
 
-    tui::show_login(&mut siv);
+    if let Some((email, pass)) = credentials::load() {
+        tui::auto_login(&mut siv, &email, &pass);
+    } else {
+        tui::show_login(&mut siv);
+    }
 
     siv.run();
 }

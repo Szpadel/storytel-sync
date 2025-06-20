@@ -2,7 +2,11 @@ use cursive::traits::*;
 use cursive::views::{Button, Dialog, EditView, LinearLayout, SelectView, TextView};
 use cursive::Cursive;
 
-use crate::{client_storytel_api, mpv};
+use crate::{client_storytel_api, mpv, credentials};
+
+fn quit_app(siv: &mut Cursive) {
+    siv.quit();
+}
 
 fn show_player(siv: &mut Cursive, book_mpv: &(u64, i64, u64)) {
     let client_data = siv.user_data::<client_storytel_api::ClientData>().unwrap();
@@ -37,6 +41,10 @@ fn show_player(siv: &mut Cursive, book_mpv: &(u64, i64, u64)) {
     );
 }
 
+pub fn auto_login(siv: &mut Cursive, email: &str, pass: &str) {
+    show_check_login(siv, email, pass);
+}
+
 fn show_bookshelf(siv: &mut Cursive) {
     let bookshelf = client_storytel_api::get_bookshelf(
         siv.user_data::<client_storytel_api::ClientData>().unwrap(),
@@ -58,7 +66,7 @@ fn show_bookshelf(siv: &mut Cursive) {
         println!("{}", book_entry.book.name);
     }
     let select = SelectView::new()
-        .with_all(book_select.into_iter())
+        .with_all(book_select)
         .on_submit(show_player);
     siv.add_layer(Dialog::around(select.scrollable()).title("Select a book to listen"));
 }
@@ -74,12 +82,15 @@ fn show_check_login(siv: &mut Cursive, email: &str, pass: &str) {
             email,
             pass,
         );
+        if let Err(e) = credentials::save(email, pass) {
+            eprintln!("Failed to save credentials: {e}");
+        }
         siv.pop_layer();
         siv.add_layer(
             Dialog::around(
                 LinearLayout::vertical()
                     .child(Button::new("Bookshelf", show_bookshelf))
-                    .child(Button::new("Exit", show_login)),
+                    .child(Button::new("Exit", quit_app)),
             )
             .title("Menu"),
         );
