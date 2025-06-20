@@ -72,6 +72,9 @@ pub fn simple_example(
         // set speed to 100%, send parameter as a f64
         mpv.set_property("speed", 1.0).unwrap();
 
+        mpv.set_property_async("pause", true, 1)
+                            .expect("Error setting MPV property");
+
         'main: loop {
             while let Some(event) = mpv.wait_event(0.0) {
                 // even if you don't do anything with the events, it is still necessary to empty

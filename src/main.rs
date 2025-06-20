@@ -22,6 +22,8 @@ fn main() {
         sender: None,
         receiver: None,
         current_abookmark_id: None,
+        current_abook_id: None,
+        current_book_name: None,
     };
 
     let mut siv = cursive::default();
