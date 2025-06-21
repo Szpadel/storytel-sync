@@ -12,7 +12,7 @@ COPY . .
 RUN cargo build --release --locked
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates \
+RUN apk add --no-cache ca-certificates tini \
  && adduser -D -g '' appuser
 COPY --from=builder /app/target/release/storytel-sync /usr/local/bin/storytel-sync
 # Sanity check
@@ -22,4 +22,4 @@ USER appuser
 WORKDIR /app
 EXPOSE 8080
 
-ENTRYPOINT ["storytel-sync"]
+ENTRYPOINT ["tini", "--", "storytel-sync"]
