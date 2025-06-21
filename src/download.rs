@@ -4,16 +4,15 @@ type SenderType = ();
 #[allow(dead_code)]
 type ReceiverType = ();
 
-use tokio::{fs, io::AsyncWriteExt};
 use futures_util::StreamExt;
 use std::path::Path;
+use tokio::{fs, io::AsyncWriteExt};
 
 pub fn is_downloaded(dst_dir: &Path, author: &str, title: &str) -> bool {
     dst_dir.join(author).join(title).join("audio.mp3").exists()
 }
 
 pub async fn download_cover(cover_url: &str, book_path: &Path) -> eyre::Result<()> {
-
     let ext = Path::new(cover_url)
         .extension()
         .and_then(|e| e.to_str())

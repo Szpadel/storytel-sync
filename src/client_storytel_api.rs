@@ -110,7 +110,11 @@ pub async fn get_bookshelf(client_data: &mut ClientData) -> eyre::Result<BookShe
                                     action?token={}",
         client_data.login_data.account_info.single_sign_token
     );
-    let resp_bookshelf = client_data.request_client.get(&url_get_bookshelf).send().await?;
+    let resp_bookshelf = client_data
+        .request_client
+        .get(&url_get_bookshelf)
+        .send()
+        .await?;
     Ok(resp_bookshelf.json::<BookShelf>().await?)
 }
 
@@ -121,7 +125,11 @@ pub async fn get_stream_url(client_data: &mut ClientData, id: u64) -> eyre::Resu
         id, client_data.login_data.account_info.single_sign_token
     );
 
-    let resp = client_data.request_client.get(&url_ask_stream).send().await?;
+    let resp = client_data
+        .request_client
+        .get(&url_ask_stream)
+        .send()
+        .await?;
     let loc = resp
         .headers()
         .get("location")
@@ -146,7 +154,8 @@ where
 
     tracing::debug!(
         "download_stream_with_progress: url={}, dst={:?}",
-        stream_url, book_path
+        stream_url,
+        book_path
     );
 
     fs::create_dir_all(book_path).await?;
