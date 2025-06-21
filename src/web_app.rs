@@ -399,7 +399,7 @@ pub async fn run(client: ClientData, cfg: &Config) {
     let progress: ProgressData = web::Data::new(Mutex::new(HashMap::new()));
 
     if cfg.sync_enabled {
-        actix_web::rt::spawn(sync_worker(
+        tokio::spawn(sync_worker(
             client_data.clone(),
             download_dir_data.clone(),
             progress.clone(),
