@@ -46,8 +46,8 @@ async fn main() -> eyre::Result<()> {
         .get_matches();
 
     let cfg_path = args.get_one::<String>("config").unwrap();
-    let host   = args.get_one::<String>("host").unwrap();   // &String
-    let port   = *args.get_one::<u16>("port").unwrap();     // u16
+    let host = args.get_one::<String>("host").unwrap();
+    let port = *args.get_one::<u16>("port").unwrap();
     let app_cfg = config::Config::load(Path::new(cfg_path))?;
 
     let (sender, receiver) = (None, None);
