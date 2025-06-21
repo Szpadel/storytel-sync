@@ -1,18 +1,17 @@
-use openssl::symm::{encrypt, Cipher};
+use cbc::Encryptor;
+use cbc::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
 
 const KEY: &[u8] = b"VQZBJ6TD8M9WBUWT";
 const IV: &[u8] = b"joiwef08u23j341a";
 
 pub fn encrypt_password(password: &str) -> String {
-    let cipher = Cipher::aes_128_cbc();
+    // CBC-AES-128 with PKCS#7 padding
+    let cipher = Encryptor::<aes::Aes128>::new_from_slices(KEY, IV).unwrap();
+    let encrypted = cipher.encrypt_padded_vec_mut::<Pkcs7>(password.as_bytes());
+
     let mut hex = String::new();
-
-    let data = password.as_bytes();
-    let encrypted_data = encrypt(cipher, KEY, Some(IV), data).unwrap();
-
-    for hex_pair in encrypted_data {
-        hex = format!("{hex}{hex_pair:02X}");
+    for byte in encrypted {
+        hex = format!("{hex}{byte:02X}");
     }
-
     hex
 }
