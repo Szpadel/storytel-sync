@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 mod client_storytel_api;
 mod config;
 mod download;
