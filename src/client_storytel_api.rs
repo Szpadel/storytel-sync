@@ -4,13 +4,9 @@ type SenderType = ();
 
 type ReceiverType = ();
 use serde::Deserialize;
-use std::{
-    fs,
-    io::{Read, Write},
-};
 
 pub struct ClientData {
-    pub request_client: reqwest::blocking::Client,
+    pub request_client: reqwest::Client,
     pub login_data: Login,
     #[allow(dead_code)]
     pub sender: Option<SenderType>,
@@ -93,7 +89,7 @@ pub struct Book {
     pub description: Option<String>,
 }
 
-pub fn login(client_data: &mut ClientData, email: &str, pass: &str) {
+pub async fn login(client_data: &mut ClientData, email: &str, pass: &str) -> eyre::Result<()> {
     let hex_encryp_pass = password_crypt::encrypt_password(pass.trim());
 
     let url = format!(
@@ -103,81 +99,75 @@ pub fn login(client_data: &mut ClientData, email: &str, pass: &str) {
         hex_encryp_pass
     );
 
-    let resp_login = client_data.request_client.get(&url).send();
-
-    client_data.login_data = resp_login.unwrap().json::<Login>().unwrap();
+    let resp_login = client_data.request_client.get(&url).send().await?;
+    client_data.login_data = resp_login.json::<Login>().await?;
+    Ok(())
 }
 
-pub fn get_bookshelf(client_data: &mut ClientData) -> BookShelf {
+pub async fn get_bookshelf(client_data: &mut ClientData) -> eyre::Result<BookShelf> {
     let url_get_bookshelf = format!(
         "https://www.storytel.com/api/getBookShelf.\
                                     action?token={}",
         client_data.login_data.account_info.single_sign_token
     );
-    let resp_bookshelf = client_data.request_client.get(&url_get_bookshelf).send();
-
-    resp_bookshelf.unwrap().json::<BookShelf>().unwrap()
+    let resp_bookshelf = client_data.request_client.get(&url_get_bookshelf).send().await?;
+    Ok(resp_bookshelf.json::<BookShelf>().await?)
 }
 
-pub fn get_stream_url(client_data: &mut ClientData, id: u64) -> String {
+pub async fn get_stream_url(client_data: &mut ClientData, id: u64) -> eyre::Result<String> {
     let url_ask_stream = format!(
         "https://www.storytel.com/mp3streamRangeReq\
                                  ?startposition=0&programId={}&token={}",
         id, client_data.login_data.account_info.single_sign_token
     );
 
-    let resp = client_data.request_client.get(&url_ask_stream).send();
-
-    resp.as_ref()
-        .unwrap()
+    let resp = client_data.request_client.get(&url_ask_stream).send().await?;
+    let loc = resp
         .headers()
         .get("location")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string()
+        .ok_or_else(|| eyre::eyre!("missing location header"))?
+        .to_str()?
+        .to_string();
+    Ok(loc)
 }
 
 use std::path::Path;
 
-pub fn download_stream_with_progress<F>(stream_url: &str, book_path: &Path, mut progress: F)
+pub async fn download_stream_with_progress<F>(
+    stream_url: &str,
+    book_path: &Path,
+    mut progress: F,
+) -> eyre::Result<()>
 where
     F: FnMut(u64, Option<u64>) + Send + 'static,
 {
+    use futures_util::StreamExt;
+    use tokio::{fs, io::AsyncWriteExt};
+
     tracing::debug!(
         "download_stream_with_progress: url={}, dst={:?}",
         stream_url, book_path
     );
-    // create "<base>/<author>/<title>/" and the target file
-    fs::create_dir_all(book_path).unwrap();
-    let file_path = book_path.join("audio.mp3");
 
-    // follow redirects by using the default `blocking::get`
-    let mut resp = reqwest::blocking::get(stream_url).unwrap();
+    fs::create_dir_all(book_path).await?;
+    let mut file = fs::File::create(book_path.join("audio.mp3")).await?;
+
+    let resp = reqwest::get(stream_url).await?;
     let total = resp.content_length();
+    let mut downloaded = 0u64;
 
-    let mut file = fs::File::create(file_path).unwrap();
-    let mut downloaded: u64 = 0;
-    let mut buf = [0_u8; 8192];
-
-    // manual copy so we can report progress
-    loop {
-        let n = resp.read(&mut buf).unwrap();
-        if n == 0 {
-            break;
-        }
-        file.write_all(&buf[..n]).unwrap();
-        downloaded += n as u64;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        file.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
         progress(downloaded, total);
     }
-    tracing::debug!(
-        "download_stream_with_progress: completed -> {:?}",
-        book_path.join("audio.mp3")
-    );
+    Ok(())
 }
 
 #[allow(dead_code)]
-pub fn set_bookmark(client_data: &mut ClientData, position: i64) {
+pub async fn set_bookmark(client_data: &mut ClientData, position: i64) -> eyre::Result<()> {
     let microsec_to_sec = 1_000_000;
     let params = [
         (
@@ -201,5 +191,6 @@ pub fn set_bookmark(client_data: &mut ClientData, position: i64) {
         .post(url_set_bookmark)
         .form(&params)
         .send()
-        .unwrap();
+        .await?;
+    Ok(())
 }

@@ -5,10 +5,9 @@ use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use rand::{rng, Rng};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::task;
 use std::fmt::Write;
 use std::convert::TryFrom;
 
@@ -46,11 +45,30 @@ async fn sync_worker(
         let client = client.clone();
         let dl_dir = dl_dir.clone();
         let progress = progress.clone();
-        task::spawn_blocking(move || {
-            let mut cd = client.lock().expect("mutex poisoned");
+        tokio::spawn(async move {
+            let mut cd = client.lock().await;
 
             // fresh bookshelf
-            let shelf = client_storytel_api::get_bookshelf(&mut cd);
+            let shelf = client_storytel_api::get_bookshelf(&mut cd).await.unwrap();
+
+            let (mut already_synced, mut need_sync) = (0, 0);
+            for be in &shelf.books {
+                if be.abook.is_some() {
+                    let author = be.book.authors_as_string.as_deref().unwrap_or("unknown");
+                    let title  = &be.book.name;
+                    let sanitize = |s: &str| s.replace(['/', '\\'], "_");
+                    if crate::download::is_downloaded(&dl_dir, &sanitize(author), &sanitize(title)) {
+                        already_synced += 1;
+                    } else {
+                        need_sync += 1;
+                    }
+                }
+            }
+            tracing::info!(
+                "sync_worker: starting sync pass – already_synced={}, need_sync={}",
+                already_synced,
+                need_sync
+            );
 
             for be in shelf.books {
                 let id = match be.abook {
@@ -79,33 +97,44 @@ async fn sync_worker(
                     continue; // already there
                 }
 
+                tracing::info!("sync_worker: downloading {author}/{title} (id={id})");
+
                 // obtain stream url (needs &mut cd)
-                let stream = client_storytel_api::get_stream_url(&mut cd, id);
+                let stream = client_storytel_api::get_stream_url(&mut cd, id).await.unwrap();
                 drop(cd); // release lock during long download
 
                 let target = dl_dir.join(&author_s).join(&title_s);
                 let mut last = Instant::now();
                 let prog_inner = progress.clone();
+
+                let author_clone = author.clone();
+                let title_clone  = title.clone();
+
                 client_storytel_api::download_stream_with_progress(
                     &stream,
                     &target,
                     move |done, total| {
-                        prog_inner.lock().unwrap().insert(id, (done, total));
+                        if let Ok(mut map) = prog_inner.try_lock() {
+                            map.insert(id, (done, total));
+                        }
                         if last.elapsed().as_secs() >= 60 {
                             last = Instant::now();
-                            println!(
-                                "[sync] {author}/{title}  {} / {}",
+                            tracing::info!(
+                                "[sync] {author_clone}/{title_clone}  {} / {}",
                                 fmt_bytes(done),
                                 total.map_or_else(|| "?".into(), fmt_bytes)
                             );
                         }
                     },
-                );
-                crate::download::download_cover(&cover_url, &target);
-                progress.lock().unwrap().remove(&id);
+                )
+                .await
+                .unwrap();
+                crate::download::download_cover(&cover_url, &target).await.unwrap();
+                tracing::info!("sync_worker: finished {author}/{title}");
+                progress.lock().await.remove(&id);
 
                 // reacquire client lock for next book
-                cd = client.lock().expect("mutex poisoned");
+                cd = client.lock().await;
             }
         });
 
@@ -123,14 +152,12 @@ async fn list(
     progress: ProgressData,
 ) -> impl Responder {
     // fetch bookshelf on a blocking thread
-    let bookshelf = match web::block(move || {
-        let mut cd = data.lock().expect("mutex poisoned");
-        client_storytel_api::get_bookshelf(&mut cd) // returns BookShelf
-    })
-    .await
-    {
-        Ok(bs) => bs,
-        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+    let bookshelf = {
+        let mut cd = data.lock().await;
+        match client_storytel_api::get_bookshelf(&mut cd).await {
+            Ok(bs) => bs,
+            Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+        }
     };
 
     let mut html = String::from(
@@ -185,7 +212,7 @@ async fn list(
             .map_or("/images/nocover.png", String::as_str);
         let cover_url = format!("https://www.storytel.com{cover_rel}");
 
-        let downloading = progress.lock().unwrap().get(&id.unwrap_or(0)).copied();
+        let downloading = progress.lock().await.get(&id.unwrap_or(0)).copied();
         let downloaded = id.is_some_and(|_| {
             crate::download::is_downloaded(&download_dir, &author_s, &title_s)
         });
@@ -237,12 +264,12 @@ async fn download(
     let progress_bg = progress.clone();
     let download_dir = download_dir.get_ref().clone();
     let data = data.clone();
-    task::spawn_blocking(move || {
+    tokio::spawn(async move {
         // ---- quick section: read API, release lock ----
         let (name, author, stream_url, cover_url) = {
-            let mut cd = data.lock().expect("mutex poisoned");
+            let mut cd = data.lock().await;
 
-            let bookshelf = client_storytel_api::get_bookshelf(&mut cd);
+            let bookshelf = client_storytel_api::get_bookshelf(&mut cd).await.unwrap();
             let (name, author) = bookshelf
                 .books
                 .iter()
@@ -270,7 +297,7 @@ async fn download(
                 })
                 .unwrap_or_else(|| "/images/nocover.png".into());
 
-            let url = client_storytel_api::get_stream_url(&mut cd, id);
+            let url = client_storytel_api::get_stream_url(&mut cd, id).await.unwrap();
 
             (
                 name,
@@ -280,9 +307,13 @@ async fn download(
             )
         };
 
+        tracing::info!("download: starting {author}/{name} (id={id})");
+
         let sanitize = |s: &str| s.replace(['/', '\\'], "_");
         let author_s = sanitize(&author);
         let title_s = sanitize(&name);
+
+        let name_clone   = name.clone();
 
         if crate::download::is_downloaded(&download_dir, &author_s, &title_s) {
             return;
@@ -303,16 +334,19 @@ async fn download(
             &target_clone,
             move |done, total| {
                 // UI progress
-                progress_inner.lock().unwrap().insert(id, (done, total));
+                if let Ok(mut map) = progress_inner.try_lock() {
+                    map.insert(id, (done, total));
+                }
 
                 // console stats every minute
                 if last_print.elapsed().as_secs() >= 60 {
                     last_print = Instant::now();
-                    let speed = done / 60;                           // bytes/s, integer
+
+                    let speed = done / 60;
                     let eta   = total.and_then(|t| if speed != 0 { Some((t - done) / speed) } else { None });
 
-                    println!(
-                        "[{name}] {} / {} @ {}/s {}",
+                    tracing::info!(
+                        "[{name_clone}] {} / {} @ {}/s {}",
                         fmt_bytes(done),
                         total.map_or_else(|| "?".into(), fmt_bytes),
                         fmt_bytes(speed),
@@ -320,13 +354,19 @@ async fn download(
                     );
                 }
             },
-        );
+        )
+        .await
+        .unwrap();
 
         tracing::debug!("download: audio done, downloading cover {}", cover_url);
-        crate::download::download_cover(&cover_url, &target_clone);
+        crate::download::download_cover(&cover_url, &target_clone)
+            .await
+            .unwrap();
+
+        tracing::info!("download: finished {author}/{name}");
 
         // finished - remove entry
-        progress_bg.lock().unwrap().remove(&id);
+        progress_bg.lock().await.remove(&id);
     });
 
     HttpResponse::SeeOther()
@@ -334,7 +374,7 @@ async fn download(
         .finish()
 }
 
-pub fn run(client: ClientData, cfg: &Config) {
+pub async fn run(client: ClientData, cfg: &Config) {
     let download_dir = cfg.download_dir.clone();
     let client_data = web::Data::new(Mutex::new(client));
     let download_dir_data = web::Data::new(download_dir.clone());
@@ -348,7 +388,7 @@ pub fn run(client: ClientData, cfg: &Config) {
         ));
     }
 
-    let server = HttpServer::new(move || {
+    HttpServer::new(move || {
         App::new()
             .app_data(client_data.clone())
             .app_data(download_dir_data.clone())
@@ -358,10 +398,7 @@ pub fn run(client: ClientData, cfg: &Config) {
     })
     .bind(("127.0.0.1", 8080))
     .expect("bind failed")
-    .run();
-
-    // wait for server; exiting gracefully when it finishes
-    actix_web::rt::System::new()
-        .block_on(server)
-        .expect("server failed");
+    .run()
+    .await
+    .expect("server failed");
 }

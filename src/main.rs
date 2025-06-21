@@ -8,14 +8,14 @@ mod web_app;
 
 use std::path::Path;
 
-fn main() -> eyre::Result<()> {
+#[tokio::main]
+async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt::init();
-    let user_agent: &str = "okhttp/3.12.8";
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(user_agent)
+
+    let client = reqwest::Client::builder()
+        .user_agent("okhttp/3.12.8")
         .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("should be able to build reqwest client");
+        .build()?;
     let login_data = client_storytel_api::Login {
         account_info: client_storytel_api::AccountInfo {
             single_sign_token: String::new(),
@@ -48,8 +48,7 @@ fn main() -> eyre::Result<()> {
     };
 
     // authenticate once so subsequent API calls have a token
-    client_storytel_api::login(&mut client_data, &app_cfg.email, &app_cfg.password);
-    web_app::run(client_data, &app_cfg);
-
+    client_storytel_api::login(&mut client_data, &app_cfg.email, &app_cfg.password).await?;
+    web_app::run(client_data, &app_cfg).await;
     Ok(())
 }
