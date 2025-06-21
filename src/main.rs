@@ -1,10 +1,15 @@
-mod client_storytel_api;
-mod mpv;
-mod password_crypt;
-mod tui;
-mod credentials;
+#![feature(let_chains)]
 
-fn main() {
+mod client_storytel_api;
+mod config;
+mod download;
+mod password_crypt;
+mod web_app;
+
+use std::path::Path;
+
+fn main() -> eyre::Result<()> {
+    tracing_subscriber::fmt::init();
     let user_agent: &str = "okhttp/3.12.8";
     let client = reqwest::blocking::Client::builder()
         .user_agent(user_agent)
@@ -13,28 +18,38 @@ fn main() {
         .expect("should be able to build reqwest client");
     let login_data = client_storytel_api::Login {
         account_info: client_storytel_api::AccountInfo {
-            single_sign_token: String::from(""),
+            single_sign_token: String::new(),
         },
     };
-    let client_data = client_storytel_api::ClientData {
+
+    let args = clap::Command::new("storytel")
+        .arg(
+            clap::Arg::new("config")
+                .long("config")
+                .required(true)
+                .value_name("FILE")
+                .num_args(1),
+        )
+        .get_matches();
+
+    let cfg_path = args.get_one::<String>("config").unwrap();
+    let app_cfg = config::Config::load(Path::new(cfg_path))?;
+
+    let (sender, receiver) = (None, None);
+
+    let mut client_data = client_storytel_api::ClientData {
         request_client: client,
         login_data,
-        sender: None,
-        receiver: None,
+        sender,
+        receiver,
         current_abookmark_id: None,
         current_abook_id: None,
         current_book_name: None,
     };
 
-    let mut siv = cursive::default();
+    // authenticate once so subsequent API calls have a token
+    client_storytel_api::login(&mut client_data, &app_cfg.email, &app_cfg.password);
+    web_app::run(client_data, &app_cfg);
 
-    siv.set_user_data(client_data);
-
-    if let Some((email, pass)) = credentials::load() {
-        tui::auto_login(&mut siv, &email, &pass);
-    } else {
-        tui::show_login(&mut siv);
-    }
-
-    siv.run();
+    Ok(())
 }
