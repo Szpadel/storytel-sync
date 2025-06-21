@@ -392,7 +392,7 @@ async fn download(
         .finish()
 }
 
-pub async fn run(client: ClientData, cfg: &Config) {
+pub async fn run(client: ClientData, cfg: &Config, host: &str, port: u16) {
     let download_dir = cfg.download_dir.clone();
     let client_data = web::Data::new(Mutex::new(client));
     let download_dir_data = web::Data::new(download_dir.clone());
@@ -414,7 +414,7 @@ pub async fn run(client: ClientData, cfg: &Config) {
             .route("/", web::get().to(list))
             .route("/download/{id}", web::post().to(download))
     })
-    .bind(("127.0.0.1", 8080))
+    .bind((host, port))
     .expect("bind failed")
     .run()
     .await
