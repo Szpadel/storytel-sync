@@ -1,49 +1,65 @@
-# storytel-tui &emsp; [![license]][GPL-3.0] [![rust_min_version]][Rust 1.31]
+# storytel-sync  [![license]][GPL-3.0]
 
-[license]: https://img.shields.io/badge/license-GPL--3.0-blue
-[GPL-3.0]: https://www.gnu.org/licenses/gpl-3.0.html
-[rust_min_version]: https://img.shields.io/badge/Rust-1.31+-lightgray.svg
-[Rust 1.31]: https://blog.rust-lang.org/2018/12/06/Rust-1.31-and-rust-2018.html
-[cargo install documentation]: https://doc.rust-lang.org/cargo/commands/cargo-install.html
+**Sync and browse your Storytel library from a tiny self-hosted web app.**
 
+## Overview
 
-**Listen to your Storytel audiobook library using a lightweight Text User Interface!**
+storytel-sync periodically mirrors your Storytel bookshelf to your own disk and exposes a
+minimal web UI so any third-party audiobook player (Smart TVs, car head-units, mobile apps,
+etc.) can stream or download the files even on platforms not officially supported by Storytel.
 
----
-
-- [Supported platforms](#supported-platforms)
-- [Building](#building)
-  - [Requirements](#requirements)
-  - [Crate installation and execution](#crate-installation-and-execution)
-- [License](#license)
-
----
+The project started as *storytel-tui* by Javier Sánchez Parra - many thanks for the original
+implementation!  It has since been rewritten to an asynchronous Rust web service, dropped the
+MPV and OpenSSL dependencies, and gained automatic background synchronisation.
 
 ## Supported platforms
 
-This program supports the platforms listed below, other platforms have not
-been tested and bugs could appear:
+The app is developed and tested on GNU/Linux x86-64.  It should run anywhere Rust and
+`actix-web` work (macOS, ARM SBCs, …) but is presently untested.
 
-- **GNU/Linux x86_64** (`x86_64-unknown-linux-gnu`)
+## Features
 
-## Building
+• Responsive bookshelf web page
+• One-click on-demand download
+• 24 h periodic background sync
+• Single static binary - no external media players required
 
-### Requirements
+## Configuration
 
-- Rust 2018 Edition or greater: `rustc 1.31+`.
-- MPV library: `libmpv.so`. This is usually provided by the mpv package.
-- OpenSSL.
+Create a `config.toml` (or `.json`) file:
 
-### Crate installation and execution
+```toml
+email        = "me@example.com"
+password     = "my-storytel-password"
+download_dir = "/srv/audiobooks"
+sync_enabled = true          # optional, default = false
+```
 
-You can run the crate directly using `cargo run --release`, this will
-create a binary in the `target/release` directory inside the repository's root
-and execute it.
+Pass the file on start-up:
+`storytel-sync --config /path/to/config.toml`
 
-Otherwise, you can install the crate in your system with `cargo install`. The path where
-the binary is installed depends on different conditions listed in the
-[cargo install documentation]. The directory where Cargo installs crates should be included
-in your `$PATH` if you wish to execute `storytel-tui` more easily.
+## Running
+
+### Native
+
+```bash
+cargo build --release
+target/release/storytel-sync --config ./config.toml
+```
+
+Only the standard Rust tool-chain is required.
+
+### Docker
+
+```
+docker run -d \
+  -p 8080:8080 \
+  -v $(pwd)/config.toml:/app/config.toml:ro \
+  -v $(pwd)/downloads:/downloads \
+  ghcr.io/<org>/storytel-sync:latest \
+  --config /app/config.toml
+```
+
 
 ## License
 
