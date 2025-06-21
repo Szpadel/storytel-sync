@@ -1,4 +1,5 @@
-# storytel-sync  [![license]][GPL-3.0]
+# storytel-sync
+[![license]][GPL-3.0]
 
 **Sync and browse your Storytel library from a tiny self-hosted web app.**
 
