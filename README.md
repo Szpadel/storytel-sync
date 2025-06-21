@@ -1,5 +1,7 @@
-# storytel-sync
-[![license]][GPL-3.0]
+# storytel-sync &emsp; [![license]][GPL-3.0]
+
+[license]: https://img.shields.io/badge/license-GPL--3.0-blue
+[GPL-3.0]: https://www.gnu.org/licenses/gpl-3.0.html
 
 **Sync and browse your Storytel library from a tiny self-hosted web app.**
 
