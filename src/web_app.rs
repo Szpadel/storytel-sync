@@ -70,7 +70,7 @@ async fn sync_worker(
                 }
             }
             tracing::info!(
-                "sync_worker: starting sync pass – already_synced={}, need_sync={}",
+                "sync_worker: starting sync pass - already_synced={}, need_sync={}",
                 already_synced,
                 need_sync
             );
@@ -170,25 +170,126 @@ async fn list(
     };
 
     let mut html = String::from(
-        r#"<!DOCTYPE html>
+        r#"
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bookshelf</title>
 <style>
- body {font-family:sans-serif;background:#f4f4f4;margin:0;padding:20px}
- h1   {text-align:center}
- .books{display:flex;flex-wrap:wrap;gap:20px;justify-content:center}
- .card{background:#fff;width:160px;border-radius:4px;
-       box-shadow:0 2px 4px rgba(0,0,0,.1);overflow:hidden;display:flex;flex-direction:column}
- .card img{width:100%;height:auto}
- .info{padding:10px;flex:1}
- .title{font-size:14px;font-weight:bold;margin-bottom:6px}
- .author{font-size:12px;color:#666;margin-bottom:6px}
- .isbn{font-size:11px;color:#999}
- .actions{padding:10px;text-align:center}
- button{padding:6px 12px;border:none;border-radius:3px;background:#1976d2;color:#fff;cursor:pointer}
- button[disabled]{background:#aaa;cursor:default}
+ body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #f8f8f8; /* Slightly lighter background */
+    margin: 0;
+    padding: 20px;
+    color: #333; /* Darker text for better contrast */
+ }
+ h1 {
+    text-align: center;
+    color: #2c3e50; /* Darker heading color */
+    margin-bottom: 30px;
+ }
+ .books {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    max-width: 1200px; /* Limit overall width */
+    margin: 0 auto; /* Center the book grid */
+ }
+ .card {
+    background: #fff;
+    width: 160px; /* Base width */
+    border-radius: 8px; /* Slightly more rounded corners */
+    box-shadow: 0 4px 12px rgba(0,0,0,.15); /* Stronger, softer shadow */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Smooth transition */
+ }
+ .card:hover {
+    transform: translateY(-5px); /* Lift effect on hover */
+    box-shadow: 0 8px 20px rgba(0,0,0,.2);
+ }
+ .card img {
+    width: 100%;
+    height: auto;
+    display: block; /* Remove extra space below image */
+ }
+ .info {
+    padding: 12px; /* Slightly more padding */
+    flex: 1;
+ }
+ .author {
+    font-size: 13px;
+    color: #555; /* Slightly darker author color */
+    margin-bottom: 4px; /* Reduced margin */
+    font-weight: 500; /* Slightly bolder author */
+ }
+ .title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 6px;
+    line-height: 1.3; /* Better line spacing */
+ }
+ .isbn {
+    font-size: 11px;
+    color: #888; /* Slightly darker ISBN color */
+ }
+ .actions {
+    padding: 12px;
+    text-align: center;
+    border-top: 1px solid #eee; /* Separator for actions */
+ }
+ button {
+    padding: 8px 16px; /* More padding for buttons */
+    border: none;
+    border-radius: 4px; /* Slightly more rounded buttons */
+    background: #007bff; /* A more vibrant blue */
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color 0.2s ease-in-out;
+ }
+ button:hover:not([disabled]) {
+    background: #0056b3; /* Darker blue on hover */
+ }
+ button[disabled] {
+    background: #cccccc; /* Lighter grey for disabled */
+    color: #666666;
+    cursor: default;
+ }
+
+ /* Responsive adjustments */
+ @media (max-width: 768px) {
+    body {
+        padding: 15px;
+    }
+    .card {
+        width: calc(50% - 15px); /* Two cards per row on medium screens */
+    }
+ }
+
+ @media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+    h1 {
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    .card {
+        width: calc(100% - 10px); /* One card per row on small screens */
+    }
+    .info {
+        padding: 10px;
+    }
+    .actions {
+        padding: 10px;
+    }
+ }
 </style>
 </head>
 <body>
@@ -225,9 +326,9 @@ async fn list(
         let downloaded =
             id.is_some_and(|_| crate::download::is_downloaded(&download_dir, &author_s, &title_s));
 
-        let pct = downloading.map(|(d, t)| t.map_or(0, |tot| 100 * d / tot));
-        let btn = if let Some(pct) = pct {
-            format!("<button disabled>Downloading {pct}%</button>")
+        let btn = if let Some((done, total)) = downloading {
+            let pct = total.map_or(0, |tot| 100 * done / tot);
+            format!(r#"<button disabled>Downloading {pct}%</button>"#)
         } else if downloaded {
             "<button disabled>Downloaded</button>".to_owned()
         } else if let Some(book_id) = id {
